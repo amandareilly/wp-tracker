@@ -23,57 +23,7 @@ get_version() {
     echo "$version"
 }
 
-# Calculate new version based on increment type
-calculate_new_version() {
-    local current_version="$1"
-    local increment_type="$2"
-    
-    # Parse current version (assuming format: major.minor.patch)
-    IFS='.' read -ra VERSION_PARTS <<< "$current_version"
-    local major="${VERSION_PARTS[0]:-0}"
-    local minor="${VERSION_PARTS[1]:-0}"
-    local patch="${VERSION_PARTS[2]:-0}"
-    
-    case "$increment_type" in
-        major)
-            major=$((major + 1))
-            minor=0
-            patch=0
-            ;;
-        minor)
-            minor=$((minor + 1))
-            patch=0
-            ;;
-        patch)
-            patch=$((patch + 1))
-            ;;
-        *)
-            echo -e "${RED}❌ Error: Invalid increment type. Use 'major', 'minor', or 'patch'${NC}"
-            exit 1
-            ;;
-    esac
-    
-    echo "${major}.${minor}.${patch}"
-}
 
-# Update version in plugin file
-update_version() {
-    local increment_type="$1"
-    local current_version=$(get_version)
-    local new_version=$(calculate_new_version "$current_version" "$increment_type")
-    local temp_file="wp-tracker.php.tmp"
-    
-    echo -e "${BLUE}📝 Updating version from $current_version to $new_version ($increment_type increment)${NC}"
-    
-    # Create backup
-    cp wp-tracker.php "wp-tracker.php.backup"
-    
-    # Update version in file
-    sed "s/Version: [0-9.]*/Version: $new_version/" wp-tracker.php > "$temp_file"
-    mv "$temp_file" wp-tracker.php
-    
-    echo -e "${GREEN}✅ Version updated successfully${NC}"
-}
 
 # Show usage information
 show_usage() {
@@ -82,16 +32,12 @@ show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --major                 Increment major version (1.0.0 → 2.0.0)"
-    echo "  --minor                 Increment minor version (1.0.0 → 1.1.0)"
-    echo "  --patch                 Increment patch version (1.0.0 → 1.0.1)"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                      Build with current version"
-    echo "  $0 --patch              Increment patch version and build"
-    echo "  $0 --minor              Increment minor version and build"
-    echo "  $0 --major              Increment major version and build"
+    echo ""
+    echo "Note: Use './version.sh' to manage version increments"
     echo ""
 }
 
@@ -172,15 +118,9 @@ validate_plugin() {
 
 # Main build process
 main() {
-    local increment_type=""
-    
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --major|--minor|--patch)
-                increment_type="${1#--}"  # Remove the -- prefix
-                shift
-                ;;
             -h|--help)
                 show_usage
                 exit 0
@@ -196,12 +136,6 @@ main() {
     echo -e "${BLUE}🚀 Starting WP Tracker build process...${NC}"
     echo ""
     
-    # Update version if specified
-    if [ -n "$increment_type" ]; then
-        update_version "$increment_type"
-        echo ""
-    fi
-    
     validate_plugin
     clean_build
     create_build_structure
@@ -212,11 +146,6 @@ main() {
     echo -e "${GREEN}🎉 Build completed successfully!${NC}"
     echo -e "${YELLOW}📁 Build directory: $BUILD_DIR${NC}"
     echo -e "${YELLOW}📦 Package: $(ls ${PLUGIN_NAME}-v*.zip)${NC}"
-    
-    # Show backup info if version was updated
-    if [ -n "$increment_type" ]; then
-        echo -e "${YELLOW}💾 Backup created: wp-tracker.php.backup${NC}"
-    fi
 }
 
 # Run main function

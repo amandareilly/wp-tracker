@@ -19,23 +19,51 @@ This will:
 
 ## Version Management
 
-The build script can automatically increment the plugin version:
+Version management is handled separately using the `version.sh` script:
 
 ```bash
-# Increment patch version (1.0.0 → 1.0.1)
-./build.sh --patch
+# Show current version
+./version.sh --current
 
-# Increment minor version (1.0.0 → 1.1.0)
-./build.sh --minor
+# Increment patch version (1.0.0 → 1.0.1) and commit
+./version.sh --patch
 
-# Increment major version (1.0.0 → 2.0.0)
-./build.sh --major
+# Increment minor version (1.0.0 → 1.1.0) and commit
+./version.sh --minor
+
+# Increment major version (1.0.0 → 2.0.0) and commit
+./version.sh --major
+
+# Update version without committing (for testing)
+./version.sh --patch --no-commit
 ```
 
 When using version increments:
 - The script automatically updates the version in `wp-tracker.php`
 - A backup of the original file is created (`wp-tracker.php.backup`)
-- The new package is built with the updated version
+- Changes are committed to git (unless `--no-commit` is used)
+- You can then run `./build.sh` to create a package with the new version
+
+## Workflow
+
+The recommended workflow for releases:
+
+1. **Update version** (commits the change):
+   ```bash
+   ./version.sh --patch  # or --minor or --major
+   ```
+
+2. **Build package**:
+   ```bash
+   ./build.sh
+   ```
+
+3. **Test the package** on your WordPress site
+
+4. **Push changes**:
+   ```bash
+   git push origin main
+   ```
 
 ## Build Output
 
