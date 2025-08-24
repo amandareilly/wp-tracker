@@ -3,7 +3,7 @@
  * Plugin Name: WP Tracker
  * Plugin URI: https://github.com/yourusername/wp-tracker
  * Description: Create tracker links that count clicks and redirect to destination URLs
- * Version: 1.0.2
+ * Version: 1.1.0
  * Author: Your Name
  * License: GPL v2 or later
  * Text Domain: wp-tracker
@@ -286,40 +286,11 @@ class WP_Tracker {
                 // Disable button and show loading
                 button.prop("disabled", true).text("Generating...");
                 
-                // Create form data
-                var formData = new FormData();
-                formData.append("action", "download_qr_code");
-                formData.append("post_id", postId);
-                formData.append("nonce", "' . wp_create_nonce('wp_tracker_nonce') . '");
+                // Create download URL
+                var downloadUrl = ajaxurl + "?action=download_qr_code&post_id=" + postId + "&nonce=' . wp_create_nonce('wp_tracker_nonce') . '";
                 
-                // Create hidden form and submit
-                var form = $("<form>", {
-                    "method": "POST",
-                    "action": ajaxurl,
-                    "target": "_blank"
-                });
-                
-                form.append($("<input>", {
-                    "type": "hidden",
-                    "name": "action",
-                    "value": "download_qr_code"
-                }));
-                
-                form.append($("<input>", {
-                    "type": "hidden",
-                    "name": "post_id",
-                    "value": postId
-                }));
-                
-                form.append($("<input>", {
-                    "type": "hidden",
-                    "name": "nonce",
-                    "value": "' . wp_create_nonce('wp_tracker_nonce') . '"
-                }));
-                
-                $("body").append(form);
-                form.submit();
-                form.remove();
+                // Open in new window/tab for download
+                window.open(downloadUrl, "_blank");
                 
                 // Re-enable button after a short delay
                 setTimeout(function() {
@@ -335,34 +306,11 @@ class WP_Tracker {
                 // Show loading state
                 img.css("opacity", "0.5");
                 
-                // Create form and submit
-                var form = $("<form>", {
-                    "method": "POST",
-                    "action": ajaxurl,
-                    "target": "_blank"
-                });
+                // Create download URL
+                var downloadUrl = ajaxurl + "?action=download_qr_code&post_id=" + postId + "&nonce=' . wp_create_nonce('wp_tracker_nonce') . '";
                 
-                form.append($("<input>", {
-                    "type": "hidden",
-                    "name": "action",
-                    "value": "download_qr_code"
-                }));
-                
-                form.append($("<input>", {
-                    "type": "hidden",
-                    "name": "post_id",
-                    "value": postId
-                }));
-                
-                form.append($("<input>", {
-                    "type": "hidden",
-                    "name": "nonce",
-                    "value": "' . wp_create_nonce('wp_tracker_nonce') . '"
-                }));
-                
-                $("body").append(form);
-                form.submit();
-                form.remove();
+                // Open in new window/tab for download
+                window.open(downloadUrl, "_blank");
                 
                 // Restore opacity after a short delay
                 setTimeout(function() {
@@ -612,9 +560,9 @@ class WP_Tracker {
      * Generate QR code for a tracker URL
      */
     public function generate_qr_code($url, $size = 200) {
-        // Use Google Charts API for QR code generation (no external dependencies)
+        // Use QR Server API as primary (more reliable than Google Charts)
         $encoded_url = urlencode($url);
-        $qr_url = "https://chart.googleapis.com/chart?chs={$size}x{$size}&cht=qr&chl={$encoded_url}&choe=UTF-8";
+        $qr_url = "https://api.qrserver.com/v1/create-qr-code/?size={$size}x{$size}&data={$encoded_url}&format=png&margin=10";
         
         return $qr_url;
     }
@@ -623,17 +571,20 @@ class WP_Tracker {
      * Download QR code as PNG
      */
     public function download_qr_code() {
-        check_ajax_referer('wp_tracker_nonce', 'nonce');
+        // Check nonce
+        if (!isset($_GET['nonce']) || !wp_verify_nonce($_GET['nonce'], 'wp_tracker_nonce')) {
+            wp_die('Security check failed');
+        }
         
         if (!current_user_can('manage_options')) {
             wp_die('Unauthorized');
         }
         
-        $post_id = intval($_POST['post_id']);
+        $post_id = intval($_GET['post_id']);
         $tracker_id = get_post_meta($post_id, '_tracker_id', true);
         
         if (empty($tracker_id)) {
-            wp_send_json_error('Invalid tracker ID');
+            wp_die('Invalid tracker ID');
         }
         
         $tracking_path = get_option('wp_tracker_path', 'trackers');
@@ -643,17 +594,30 @@ class WP_Tracker {
         $qr_url = $this->generate_qr_code($tracker_url, 300);
         
         // Get QR code image data
-        $response = wp_remote_get($qr_url);
+        $response = wp_remote_get($qr_url, array(
+            'timeout' => 30,
+            'user-agent' => 'WordPress/' . get_bloginfo('version')
+        ));
         
         if (is_wp_error($response)) {
-            wp_send_json_error('Failed to generate QR code');
+            wp_die('Failed to generate QR code: ' . $response->get_error_message());
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            wp_die('QR code service returned error: ' . $response_code);
         }
         
         $image_data = wp_remote_retrieve_body($response);
         $content_type = wp_remote_retrieve_header($response, 'content-type');
         
-        if (empty($image_data) || strpos($content_type, 'image/') === false) {
-            wp_send_json_error('Invalid QR code data');
+        if (empty($image_data)) {
+            wp_die('Invalid QR code data - empty response');
+        }
+        
+        // Check if we got a valid image
+        if (strpos($content_type, 'image/') === false) {
+            wp_die('Invalid QR code data - not an image. Content-Type: ' . $content_type);
         }
         
         // Set headers for download
