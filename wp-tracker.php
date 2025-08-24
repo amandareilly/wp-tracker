@@ -3,7 +3,7 @@
  * Plugin Name: WP Tracker
  * Plugin URI: https://github.com/yourusername/wp-tracker
  * Description: Create tracker links that count clicks and redirect to destination URLs
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Your Name
  * License: GPL v2 or later
  * Text Domain: wp-tracker
@@ -29,6 +29,7 @@ class WP_Tracker {
         add_action('wp_ajax_get_tracker_stats', array($this, 'get_tracker_stats'));
         add_action('wp_ajax_delete_tracker_link', array($this, 'delete_tracker_link'));
         add_action('wp_ajax_save_tracking_settings', array($this, 'save_tracking_settings'));
+        add_action('wp_ajax_download_qr_code', array($this, 'download_qr_code'));
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
         add_action('template_redirect', array($this, 'handle_tracker_redirect'));
@@ -236,6 +237,7 @@ class WP_Tracker {
         echo '<th>Destination URL</th>';
         echo '<th>Clicks</th>';
         echo '<th>Created</th>';
+        echo '<th>QR Code</th>';
         echo '<th>Actions</th>';
         echo '</tr>';
         echo '</thead>';
@@ -254,7 +256,12 @@ class WP_Tracker {
             echo '<td>' . intval($click_count) . '</td>';
             echo '<td>' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
             echo '<td>';
+            $qr_url = $this->generate_qr_code($tracker_url, 80);
+            echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" style="width: 80px; height: 80px; border: 1px solid #ddd; cursor: pointer;" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
+            echo '</td>';
+            echo '<td>';
             echo '<button class="button copy-tracker" data-url="' . esc_attr($tracker_url) . '">Copy URL</button> ';
+            echo '<button class="button download-qr" data-post-id="' . esc_attr($link->ID) . '">Download QR</button> ';
             echo '<button class="button delete-tracker" data-post-id="' . esc_attr($link->ID) . '">Delete</button>';
             echo '</td>';
             echo '</tr>';
@@ -270,6 +277,97 @@ class WP_Tracker {
                 navigator.clipboard.writeText(url).then(function() {
                     alert("Tracker URL copied to clipboard!");
                 });
+            });
+            
+            $(".download-qr").on("click", function() {
+                var postId = $(this).data("post-id");
+                var button = $(this);
+                
+                // Disable button and show loading
+                button.prop("disabled", true).text("Generating...");
+                
+                // Create form data
+                var formData = new FormData();
+                formData.append("action", "download_qr_code");
+                formData.append("post_id", postId);
+                formData.append("nonce", "' . wp_create_nonce('wp_tracker_nonce') . '");
+                
+                // Create hidden form and submit
+                var form = $("<form>", {
+                    "method": "POST",
+                    "action": ajaxurl,
+                    "target": "_blank"
+                });
+                
+                form.append($("<input>", {
+                    "type": "hidden",
+                    "name": "action",
+                    "value": "download_qr_code"
+                }));
+                
+                form.append($("<input>", {
+                    "type": "hidden",
+                    "name": "post_id",
+                    "value": postId
+                }));
+                
+                form.append($("<input>", {
+                    "type": "hidden",
+                    "name": "nonce",
+                    "value": "' . wp_create_nonce('wp_tracker_nonce') . '"
+                }));
+                
+                $("body").append(form);
+                form.submit();
+                form.remove();
+                
+                // Re-enable button after a short delay
+                setTimeout(function() {
+                    button.prop("disabled", false).text("Download QR");
+                }, 2000);
+            });
+            
+            // Make QR code preview clickable for download
+            $(".qr-preview").on("click", function() {
+                var postId = $(this).data("post-id");
+                var img = $(this);
+                
+                // Show loading state
+                img.css("opacity", "0.5");
+                
+                // Create form and submit
+                var form = $("<form>", {
+                    "method": "POST",
+                    "action": ajaxurl,
+                    "target": "_blank"
+                });
+                
+                form.append($("<input>", {
+                    "type": "hidden",
+                    "name": "action",
+                    "value": "download_qr_code"
+                }));
+                
+                form.append($("<input>", {
+                    "type": "hidden",
+                    "name": "post_id",
+                    "value": postId
+                }));
+                
+                form.append($("<input>", {
+                    "type": "hidden",
+                    "name": "nonce",
+                    "value": "' . wp_create_nonce('wp_tracker_nonce') . '"
+                }));
+                
+                $("body").append(form);
+                form.submit();
+                form.remove();
+                
+                // Restore opacity after a short delay
+                setTimeout(function() {
+                    img.css("opacity", "1");
+                }, 1000);
             });
         });
         </script>';
@@ -508,6 +606,66 @@ class WP_Tracker {
             wp_redirect($destination_url);
             exit;
         }
+    }
+    
+    /**
+     * Generate QR code for a tracker URL
+     */
+    public function generate_qr_code($url, $size = 200) {
+        // Use Google Charts API for QR code generation (no external dependencies)
+        $encoded_url = urlencode($url);
+        $qr_url = "https://chart.googleapis.com/chart?chs={$size}x{$size}&cht=qr&chl={$encoded_url}&choe=UTF-8";
+        
+        return $qr_url;
+    }
+    
+    /**
+     * Download QR code as PNG
+     */
+    public function download_qr_code() {
+        check_ajax_referer('wp_tracker_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized');
+        }
+        
+        $post_id = intval($_POST['post_id']);
+        $tracker_id = get_post_meta($post_id, '_tracker_id', true);
+        
+        if (empty($tracker_id)) {
+            wp_send_json_error('Invalid tracker ID');
+        }
+        
+        $tracking_path = get_option('wp_tracker_path', 'trackers');
+        $tracker_url = home_url($tracking_path . '/' . $tracker_id);
+        
+        // Generate QR code URL
+        $qr_url = $this->generate_qr_code($tracker_url, 300);
+        
+        // Get QR code image data
+        $response = wp_remote_get($qr_url);
+        
+        if (is_wp_error($response)) {
+            wp_send_json_error('Failed to generate QR code');
+        }
+        
+        $image_data = wp_remote_retrieve_body($response);
+        $content_type = wp_remote_retrieve_header($response, 'content-type');
+        
+        if (empty($image_data) || strpos($content_type, 'image/') === false) {
+            wp_send_json_error('Invalid QR code data');
+        }
+        
+        // Set headers for download
+        header('Content-Type: ' . $content_type);
+        header('Content-Disposition: attachment; filename="qr-code-' . $tracker_id . '.png"');
+        header('Content-Length: ' . strlen($image_data));
+        header('Cache-Control: no-cache, must-revalidate');
+        header('Pragma: no-cache');
+        
+        // Output the image data
+        echo $image_data;
+        exit;
     }
 }
 
