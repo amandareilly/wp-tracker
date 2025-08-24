@@ -3,7 +3,7 @@
  * Plugin Name: WP Tracker
  * Plugin URI: https://github.com/yourusername/wp-tracker
  * Description: Create tracker links that count clicks and redirect to destination URLs
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Your Name
  * License: GPL v2 or later
  * Text Domain: wp-tracker
@@ -122,12 +122,12 @@ class WP_Tracker {
         <div class="wrap">
             <h1>WP Tracker</h1>
             
-            <div class="card">
+            <div class="card" style="margin-bottom: 20px;">
                 <h2>Settings</h2>
                 <p>Configure your tracking path in the <a href="<?php echo admin_url('admin.php?page=wp-tracker-settings'); ?>">Settings</a> page.</p>
             </div>
             
-            <div class="card">
+            <div class="card" style="margin-bottom: 20px;">
                 <h2>Create New Tracker Link</h2>
                 <form id="create-tracker-form">
                     <table class="form-table">
@@ -230,15 +230,80 @@ class WP_Tracker {
             return;
         }
         
-        echo '<table class="wp-list-table widefat fixed striped">';
+        echo '<style>
+        .wp-tracker-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .wp-tracker-table th,
+        .wp-tracker-table td {
+            padding: 12px 8px;
+            text-align: left;
+            vertical-align: top;
+            border-bottom: 1px solid #ddd;
+        }
+        .wp-tracker-table th {
+            background-color: #f9f9f9;
+            font-weight: 600;
+        }
+        .wp-tracker-table .tracker-id {
+            width: 120px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .wp-tracker-table .destination-url {
+            width: 300px;
+            word-break: break-all;
+        }
+        .wp-tracker-table .clicks {
+            width: 80px;
+            text-align: center;
+        }
+        .wp-tracker-table .created {
+            width: 150px;
+        }
+        .wp-tracker-table .qr-code {
+            width: 100px;
+            text-align: center;
+        }
+        .wp-tracker-table .actions {
+            width: 200px;
+        }
+        .wp-tracker-table .qr-preview {
+            width: 80px;
+            height: 80px;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .wp-tracker-table .qr-preview:hover {
+            opacity: 0.8;
+        }
+        .wp-tracker-table .button {
+            margin: 2px;
+            font-size: 11px;
+            padding: 4px 8px;
+        }
+        @media (max-width: 1200px) {
+            .wp-tracker-table .destination-url {
+                width: 200px;
+            }
+            .wp-tracker-table .created {
+                width: 120px;
+            }
+        }
+        </style>';
+        
+        echo '<table class="wp-tracker-table">';
         echo '<thead>';
         echo '<tr>';
-        echo '<th>Tracker ID</th>';
-        echo '<th>Destination URL</th>';
-        echo '<th>Clicks</th>';
-        echo '<th>Created</th>';
-        echo '<th>QR Code</th>';
-        echo '<th>Actions</th>';
+        echo '<th class="tracker-id">Tracker ID</th>';
+        echo '<th class="destination-url">Destination URL</th>';
+        echo '<th class="clicks">Clicks</th>';
+        echo '<th class="created">Created</th>';
+        echo '<th class="qr-code">QR Code</th>';
+        echo '<th class="actions">Actions</th>';
         echo '</tr>';
         echo '</thead>';
         echo '<tbody>';
@@ -251,15 +316,15 @@ class WP_Tracker {
             $tracker_url = home_url($tracking_path . '/' . $tracker_id);
             
             echo '<tr>';
-            echo '<td><code>' . esc_html($tracker_id) . '</code></td>';
-            echo '<td><a href="' . esc_url($destination_url) . '" target="_blank">' . esc_html($destination_url) . '</a></td>';
-            echo '<td>' . intval($click_count) . '</td>';
-            echo '<td>' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
-            echo '<td>';
+            echo '<td class="tracker-id"><code>' . esc_html($tracker_id) . '</code></td>';
+            echo '<td class="destination-url"><a href="' . esc_url($destination_url) . '" target="_blank">' . esc_html($destination_url) . '</a></td>';
+            echo '<td class="clicks">' . intval($click_count) . '</td>';
+            echo '<td class="created">' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
+            echo '<td class="qr-code">';
             $qr_url = $this->generate_qr_code($tracker_url, 80);
-            echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" style="width: 80px; height: 80px; border: 1px solid #ddd; cursor: pointer;" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
+            echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
             echo '</td>';
-            echo '<td>';
+            echo '<td class="actions">';
             echo '<button class="button copy-tracker" data-url="' . esc_attr($tracker_url) . '">Copy URL</button> ';
             echo '<button class="button download-qr" data-post-id="' . esc_attr($link->ID) . '">Download QR</button> ';
             echo '<button class="button delete-tracker" data-post-id="' . esc_attr($link->ID) . '">Delete</button>';
