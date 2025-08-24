@@ -3,7 +3,7 @@
  * Plugin Name: WP Tracker
  * Plugin URI: https://github.com/yourusername/wp-tracker
  * Description: Create tracker links that count clicks and redirect to destination URLs
- * Version: 1.1.3
+ * Version: 1.1.4
  * Author: Your Name
  * License: GPL v2 or later
  * Text Domain: wp-tracker
@@ -28,6 +28,8 @@ class WP_Tracker {
         add_action('wp_ajax_create_tracker_link', array($this, 'create_tracker_link'));
         add_action('wp_ajax_get_tracker_stats', array($this, 'get_tracker_stats'));
         add_action('wp_ajax_delete_tracker_link', array($this, 'delete_tracker_link'));
+        add_action('wp_ajax_archive_tracker_link', array($this, 'archive_tracker_link'));
+        add_action('wp_ajax_unarchive_tracker_link', array($this, 'unarchive_tracker_link'));
         add_action('wp_ajax_save_tracking_settings', array($this, 'save_tracking_settings'));
         add_action('wp_ajax_download_qr_code', array($this, 'download_qr_code'));
         register_activation_hook(__FILE__, array($this, 'activate'));
@@ -152,6 +154,9 @@ class WP_Tracker {
                 <div id="tracker-links-list">
                     <?php $this->display_tracker_links(); ?>
                 </div>
+                <div id="archived-links-list" style="display: none;">
+                    <?php $this->display_archived_links(); ?>
+                </div>
             </div>
         </div>
         
@@ -209,6 +214,21 @@ class WP_Tracker {
                     }
                 });
             });
+            
+            // Toggle archived links visibility
+            $(document).on("click", "#show-archived", function(e) {
+                e.preventDefault();
+                $("#tracker-links-list").hide();
+                $("#archived-links-list").show();
+                $(this).text("Show active links").attr("id", "show-active");
+            });
+            
+            $(document).on("click", "#show-active", function(e) {
+                e.preventDefault();
+                $("#archived-links-list").hide();
+                $("#tracker-links-list").show();
+                $(this).text("Show archived links").attr("id", "show-archived");
+            });
         });
         </script>
         <?php
@@ -223,10 +243,19 @@ class WP_Tracker {
             'order' => 'DESC'
         );
         
-        $links = get_posts($args);
+        $all_links = get_posts($args);
+        
+        // Filter out archived links
+        $links = array();
+        foreach ($all_links as $link) {
+            $archived = get_post_meta($link->ID, '_archived', true);
+            if (!$archived) {
+                $links[] = $link;
+            }
+        }
         
         if (empty($links)) {
-            echo '<p>No tracker links created yet.</p>';
+            echo '<p>No active tracker links. <a href="#" id="show-archived">Show archived links</a></p>';
             return;
         }
         
@@ -313,6 +342,7 @@ class WP_Tracker {
             echo '<td class="column-actions">';
             echo '<button class="button copy-tracker" data-url="' . esc_attr($tracker_url) . '">Copy URL</button> ';
             echo '<button class="button download-qr" data-post-id="' . esc_attr($link->ID) . '">Download QR</button> ';
+            echo '<button class="button archive-tracker" data-post-id="' . esc_attr($link->ID) . '">Archive</button> ';
             echo '<button class="button delete-tracker" data-post-id="' . esc_attr($link->ID) . '">Delete</button>';
             echo '</td>';
             echo '</tr>';
@@ -367,6 +397,187 @@ class WP_Tracker {
                 setTimeout(function() {
                     img.css("opacity", "1");
                 }, 1000);
+            });
+            
+            // Archive tracker link
+            $(".archive-tracker").on("click", function() {
+                if (!confirm("Are you sure you want to archive this tracker link? It will be hidden from the dashboard but will continue to work and count clicks.")) {
+                    return;
+                }
+                
+                var postId = $(this).data("post-id");
+                var button = $(this);
+                var row = button.closest("tr");
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: "POST",
+                    data: {
+                        action: "archive_tracker_link",
+                        post_id: postId,
+                        nonce: "' . wp_create_nonce('wp_tracker_nonce') . '"
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            row.fadeOut(300, function() {
+                                row.remove();
+                                // Check if no more rows
+                                if ($("tbody tr").length === 0) {
+                                    $("tbody").html("<tr><td colspan='6'><p>No active tracker links. <a href='#' id='show-archived'>Show archived links</a></p></td></tr>");
+                                }
+                            });
+                        } else {
+                            alert("Error: " + response.data);
+                        }
+                    },
+                    error: function() {
+                        alert("Error archiving tracker link");
+                    }
+                });
+            });
+            
+            // Delete tracker link
+            $(".delete-tracker").on("click", function() {
+                if (!confirm("Are you sure you want to delete this tracker link? This action cannot be undone.")) {
+                    return;
+                }
+                
+                var postId = $(this).data("post-id");
+                var button = $(this);
+                var row = button.closest("tr");
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: "POST",
+                    data: {
+                        action: "delete_tracker_link",
+                        post_id: postId,
+                        nonce: "' . wp_create_nonce('wp_tracker_nonce') . '"
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            row.fadeOut(300, function() {
+                                row.remove();
+                                // Check if no more rows
+                                if ($("tbody tr").length === 0) {
+                                    $("tbody").html("<tr><td colspan='6'><p>No active tracker links. <a href='#' id='show-archived'>Show archived links</a></p></td></tr>");
+                                }
+                            });
+                        } else {
+                            alert("Error: " + response.data);
+                        }
+                    },
+                    error: function() {
+                        alert("Error deleting tracker link");
+                    }
+                });
+            });
+        });
+        </script>';
+    }
+    
+    public function display_archived_links() {
+        $args = array(
+            'post_type' => 'tracker_link',
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'orderby' => 'date',
+            'order' => 'DESC'
+        );
+        
+        $all_links = get_posts($args);
+        
+        // Filter to show only archived links
+        $links = array();
+        foreach ($all_links as $link) {
+            $archived = get_post_meta($link->ID, '_archived', true);
+            if ($archived) {
+                $links[] = $link;
+            }
+        }
+        
+        if (empty($links)) {
+            echo '<p>No archived tracker links.</p>';
+            return;
+        }
+        
+        echo '<h3>Archived Tracker Links</h3>';
+        echo '<table class="wp-list-table widefat fixed striped">';
+        echo '<thead>';
+        echo '<tr>';
+        echo '<th scope="col" class="manage-column column-tracker-id">Tracker ID</th>';
+        echo '<th scope="col" class="manage-column column-destination-url">Destination URL</th>';
+        echo '<th scope="col" class="manage-column column-clicks">Clicks</th>';
+        echo '<th scope="col" class="manage-column column-created">Created</th>';
+        echo '<th scope="col" class="manage-column column-qr-code">QR Code</th>';
+        echo '<th scope="col" class="manage-column column-actions">Actions</th>';
+        echo '</tr>';
+        echo '</thead>';
+        echo '<tbody>';
+        
+        foreach ($links as $link) {
+            $tracker_id = get_post_meta($link->ID, '_tracker_id', true);
+            $destination_url = get_post_meta($link->ID, '_destination_url', true);
+            $click_count = get_post_meta($link->ID, '_click_count', true);
+            $tracking_path = get_option('wp_tracker_path', 'trackers');
+            $tracker_url = home_url($tracking_path . '/' . $tracker_id);
+            
+            echo '<tr>';
+            echo '<td class="column-tracker-id"><code>' . esc_html($tracker_id) . '</code></td>';
+            echo '<td class="column-destination-url"><a href="' . esc_url($destination_url) . '" target="_blank">' . esc_html($destination_url) . '</a></td>';
+            echo '<td class="column-clicks">' . intval($click_count) . '</td>';
+            echo '<td class="column-created">' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
+            echo '<td class="column-qr-code">';
+            $qr_url = $this->generate_qr_code($tracker_url, 80);
+            echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
+            echo '</td>';
+            echo '<td class="column-actions">';
+            echo '<button class="button copy-tracker" data-url="' . esc_attr($tracker_url) . '">Copy URL</button> ';
+            echo '<button class="button download-qr" data-post-id="' . esc_attr($link->ID) . '">Download QR</button> ';
+            echo '<button class="button unarchive-tracker" data-post-id="' . esc_attr($link->ID) . '">Unarchive</button> ';
+            echo '<button class="button delete-tracker" data-post-id="' . esc_attr($link->ID) . '">Delete</button>';
+            echo '</td>';
+            echo '</tr>';
+        }
+        
+        echo '</tbody>';
+        echo '</table>';
+        
+        echo '<script>
+        jQuery(document).ready(function($) {
+            // Unarchive tracker link
+            $(".unarchive-tracker").on("click", function() {
+                var postId = $(this).data("post-id");
+                var button = $(this);
+                var row = button.closest("tr");
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: "POST",
+                    data: {
+                        action: "unarchive_tracker_link",
+                        post_id: postId,
+                        nonce: "' . wp_create_nonce('wp_tracker_nonce') . '"
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            row.fadeOut(300, function() {
+                                row.remove();
+                                // Check if no more archived rows
+                                if ($("#archived-links-list tbody tr").length === 0) {
+                                    $("#archived-links-list").html("<p>No archived tracker links.</p>");
+                                }
+                            });
+                            // Reload the main table to show the unarchived link
+                            location.reload();
+                        } else {
+                            alert("Error: " + response.data);
+                        }
+                    },
+                    error: function() {
+                        alert("Error unarchiving tracker link");
+                    }
+                });
             });
         });
         </script>';
@@ -439,6 +650,64 @@ class WP_Tracker {
         }
         
         wp_send_json_success('Tracker link deleted successfully');
+    }
+    
+    public function archive_tracker_link() {
+        check_ajax_referer('wp_tracker_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized');
+        }
+        
+        $post_id = intval($_POST['post_id']);
+        
+        if (!$post_id) {
+            wp_send_json_error('Invalid post ID');
+        }
+        
+        $post = get_post($post_id);
+        
+        if (!$post || $post->post_type !== 'tracker_link') {
+            wp_send_json_error('Tracker link not found');
+        }
+        
+        // Set archive status
+        $result = update_post_meta($post_id, '_archived', '1');
+        
+        if ($result) {
+            wp_send_json_success('Tracker link archived successfully');
+        } else {
+            wp_send_json_error('Failed to archive tracker link');
+        }
+    }
+    
+    public function unarchive_tracker_link() {
+        check_ajax_referer('wp_tracker_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized');
+        }
+        
+        $post_id = intval($_POST['post_id']);
+        
+        if (!$post_id) {
+            wp_send_json_error('Invalid post ID');
+        }
+        
+        $post = get_post($post_id);
+        
+        if (!$post || $post->post_type !== 'tracker_link') {
+            wp_send_json_error('Tracker link not found');
+        }
+        
+        // Remove archive status
+        $result = delete_post_meta($post_id, '_archived');
+        
+        if ($result) {
+            wp_send_json_success('Tracker link unarchived successfully');
+        } else {
+            wp_send_json_error('Failed to unarchive tracker link');
+        }
     }
     
     public function settings_page() {
