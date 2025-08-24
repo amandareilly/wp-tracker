@@ -119,7 +119,7 @@ class WP_Tracker {
     
     public function admin_page() {
         ?>
-        <div class="wrap">
+        <div class="wrap wp-tracker-container">
             <h1>WP Tracker</h1>
             
             <div class="card" style="margin-bottom: 20px;">
@@ -231,77 +231,65 @@ class WP_Tracker {
         }
         
         echo '<style>
-        .wp-tracker-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            table-layout: auto;
-        }
-        .wp-tracker-table th,
-        .wp-tracker-table td {
-            padding: 12px 8px;
-            text-align: left;
-            vertical-align: top;
-            border-bottom: 1px solid #ddd;
-        }
-        .wp-tracker-table th {
-            background-color: #f9f9f9;
-            font-weight: 600;
-        }
-        .wp-tracker-table .tracker-id {
+        /* Column width overrides for WordPress admin table */
+        .column-tracker-id {
             width: 120px;
-            min-width: 120px;
             font-family: monospace;
             font-size: 12px;
         }
-        .wp-tracker-table .destination-url {
+        .column-destination-url {
             min-width: 200px;
             word-break: break-all;
         }
-        .wp-tracker-table .clicks {
+        .column-clicks {
             width: 80px;
-            min-width: 80px;
             text-align: center;
         }
-        .wp-tracker-table .created {
+        .column-created {
             width: 150px;
-            min-width: 150px;
         }
-        .wp-tracker-table .qr-code {
+        .column-qr-code {
             width: 100px;
-            min-width: 100px;
             text-align: center;
         }
-        .wp-tracker-table .actions {
+        .column-actions {
             width: 200px;
-            min-width: 200px;
         }
-        .wp-tracker-table .qr-preview {
+        .qr-preview {
             width: 80px;
             height: 80px;
             border: 1px solid #ddd;
             cursor: pointer;
             transition: opacity 0.2s;
         }
-        .wp-tracker-table .qr-preview:hover {
+        .qr-preview:hover {
             opacity: 0.8;
         }
-        .wp-tracker-table .button {
+        .column-actions .button {
             margin: 2px;
             font-size: 11px;
             padding: 4px 8px;
         }
+        /* Ensure full width */
+        .wp-tracker-container {
+            width: 100%;
+            max-width: none;
+        }
+        .wp-tracker-container .card {
+            width: 100%;
+            max-width: none;
+        }
         </style>';
         
-        echo '<table class="wp-tracker-table">';
+        echo '<table class="wp-list-table widefat fixed striped">';
         echo '<thead>';
         echo '<tr>';
-        echo '<th class="tracker-id">Tracker ID</th>';
-        echo '<th class="destination-url">Destination URL</th>';
-        echo '<th class="clicks">Clicks</th>';
-        echo '<th class="created">Created</th>';
-        echo '<th class="qr-code">QR Code</th>';
-        echo '<th class="actions">Actions</th>';
+        echo '<th scope="col" class="manage-column column-tracker-id">Tracker ID</th>';
+        echo '<th scope="col" class="manage-column column-destination-url">Destination URL</th>';
+        echo '<th scope="col" class="manage-column column-clicks">Clicks</th>';
+        echo '<th scope="col" class="manage-column column-created">Created</th>';
+        echo '<th scope="col" class="manage-column column-qr-code">QR Code</th>';
+        echo '<th scope="col" class="manage-column column-actions">Actions</th>';
         echo '</tr>';
         echo '</thead>';
         echo '<tbody>';
@@ -314,15 +302,15 @@ class WP_Tracker {
             $tracker_url = home_url($tracking_path . '/' . $tracker_id);
             
             echo '<tr>';
-            echo '<td class="tracker-id"><code>' . esc_html($tracker_id) . '</code></td>';
-            echo '<td class="destination-url"><a href="' . esc_url($destination_url) . '" target="_blank">' . esc_html($destination_url) . '</a></td>';
-            echo '<td class="clicks">' . intval($click_count) . '</td>';
-            echo '<td class="created">' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
-            echo '<td class="qr-code">';
+            echo '<td class="column-tracker-id"><code>' . esc_html($tracker_id) . '</code></td>';
+            echo '<td class="column-destination-url"><a href="' . esc_url($destination_url) . '" target="_blank">' . esc_html($destination_url) . '</a></td>';
+            echo '<td class="column-clicks">' . intval($click_count) . '</td>';
+            echo '<td class="column-created">' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
+            echo '<td class="column-qr-code">';
             $qr_url = $this->generate_qr_code($tracker_url, 80);
             echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
             echo '</td>';
-            echo '<td class="actions">';
+            echo '<td class="column-actions">';
             echo '<button class="button copy-tracker" data-url="' . esc_attr($tracker_url) . '">Copy URL</button> ';
             echo '<button class="button download-qr" data-post-id="' . esc_attr($link->ID) . '">Download QR</button> ';
             echo '<button class="button delete-tracker" data-post-id="' . esc_attr($link->ID) . '">Delete</button>';
