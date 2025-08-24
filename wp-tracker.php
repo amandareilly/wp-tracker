@@ -235,6 +235,7 @@ class WP_Tracker {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            table-layout: auto;
         }
         .wp-tracker-table th,
         .wp-tracker-table td {
@@ -249,26 +250,31 @@ class WP_Tracker {
         }
         .wp-tracker-table .tracker-id {
             width: 120px;
+            min-width: 120px;
             font-family: monospace;
             font-size: 12px;
         }
         .wp-tracker-table .destination-url {
-            width: 300px;
+            min-width: 200px;
             word-break: break-all;
         }
         .wp-tracker-table .clicks {
             width: 80px;
+            min-width: 80px;
             text-align: center;
         }
         .wp-tracker-table .created {
             width: 150px;
+            min-width: 150px;
         }
         .wp-tracker-table .qr-code {
             width: 100px;
+            min-width: 100px;
             text-align: center;
         }
         .wp-tracker-table .actions {
             width: 200px;
+            min-width: 200px;
         }
         .wp-tracker-table .qr-preview {
             width: 80px;
@@ -284,14 +290,6 @@ class WP_Tracker {
             margin: 2px;
             font-size: 11px;
             padding: 4px 8px;
-        }
-        @media (max-width: 1200px) {
-            .wp-tracker-table .destination-url {
-                width: 200px;
-            }
-            .wp-tracker-table .created {
-                width: 120px;
-            }
         }
         </style>';
         
