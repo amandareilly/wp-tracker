@@ -23,39 +23,69 @@ class WP_Tracker {
     
     public function __construct() {
         add_action('init', array($this, 'init'));
+        add_action('init', array($this, 'register_tracker_post_type'));
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('wp_ajax_create_tracker_link', array($this, 'create_tracker_link'));
         add_action('wp_ajax_get_tracker_stats', array($this, 'get_tracker_stats'));
         add_action('wp_ajax_delete_tracker_link', array($this, 'delete_tracker_link'));
+        add_action('wp_ajax_save_tracking_settings', array($this, 'save_tracking_settings'));
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
+        add_action('template_redirect', array($this, 'handle_tracker_redirect'));
     }
     
     public function init() {
-        // Handle tracker redirects
-        if (isset($_GET['tracker_id'])) {
-            $this->handle_tracker_redirect();
-        }
+        // Initialize any necessary functionality
+    }
+    
+    public function register_tracker_post_type() {
+        $tracking_path = get_option('wp_tracker_path', 'trackers');
+        
+        $labels = array(
+            'name'               => 'Tracker Links',
+            'singular_name'      => 'Tracker Link',
+            'menu_name'          => 'Tracker Links',
+            'add_new'            => 'Add New',
+            'add_new_item'       => 'Add New Tracker Link',
+            'edit_item'          => 'Edit Tracker Link',
+            'new_item'           => 'New Tracker Link',
+            'view_item'          => 'View Tracker Link',
+            'search_items'       => 'Search Tracker Links',
+            'not_found'          => 'No tracker links found',
+            'not_found_in_trash' => 'No tracker links found in trash'
+        );
+        
+        $args = array(
+            'labels'              => $labels,
+            'public'              => true,
+            'publicly_queryable'  => true,
+            'show_ui'             => false, // We'll use our custom admin interface
+            'show_in_menu'        => false,
+            'show_in_nav_menus'   => false,
+            'show_in_admin_bar'   => false,
+            'show_in_rest'        => false,
+            'query_var'           => true,
+            'rewrite'             => array('slug' => $tracking_path),
+            'capability_type'     => 'post',
+            'has_archive'         => false,
+            'hierarchical'        => false,
+            'menu_position'       => null,
+            'supports'            => array('title', 'custom-fields'),
+            'can_export'          => false,
+            'delete_with_user'    => false
+        );
+        
+        register_post_type('tracker_link', $args);
     }
     
     public function activate() {
-        global $wpdb;
+        // Set default tracking path
+        if (!get_option('wp_tracker_path')) {
+            update_option('wp_tracker_path', 'trackers');
+        }
         
-        $table_name = $wpdb->prefix . 'tracker_links';
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE $table_name (
-            id mediumint(9) NOT NULL AUTO_INCREMENT,
-            destination_url varchar(500) NOT NULL,
-            tracker_id varchar(32) NOT NULL,
-            click_count int(11) DEFAULT 0,
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY tracker_id (tracker_id)
-        ) $charset_collate;";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
+        // Flush rewrite rules to register the custom post type
+        flush_rewrite_rules();
     }
     
     public function deactivate() {
@@ -72,12 +102,26 @@ class WP_Tracker {
             'dashicons-chart-line',
             30
         );
+        
+        add_submenu_page(
+            'wp-tracker',
+            'Settings',
+            'Settings',
+            'manage_options',
+            'wp-tracker-settings',
+            array($this, 'settings_page')
+        );
     }
     
     public function admin_page() {
         ?>
         <div class="wrap">
             <h1>WP Tracker</h1>
+            
+            <div class="card">
+                <h2>Settings</h2>
+                <p>Configure your tracking path in the <a href="<?php echo admin_url('admin.php?page=wp-tracker-settings'); ?>">Settings</a> page.</p>
+            </div>
             
             <div class="card">
                 <h2>Create New Tracker Link</h2>
@@ -140,7 +184,7 @@ class WP_Tracker {
                     return;
                 }
                 
-                var trackerId = $(this).data('tracker-id');
+                var postId = $(this).data('post-id');
                 var row = $(this).closest('tr');
                 
                 $.ajax({
@@ -148,7 +192,7 @@ class WP_Tracker {
                     type: 'POST',
                     data: {
                         action: 'delete_tracker_link',
-                        tracker_id: trackerId,
+                        post_id: postId,
                         nonce: '<?php echo wp_create_nonce('wp_tracker_nonce'); ?>'
                     },
                     success: function(response) {
@@ -167,10 +211,15 @@ class WP_Tracker {
     }
     
     public function display_tracker_links() {
-        global $wpdb;
+        $args = array(
+            'post_type' => 'tracker_link',
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'orderby' => 'date',
+            'order' => 'DESC'
+        );
         
-        $table_name = $wpdb->prefix . 'tracker_links';
-        $links = $wpdb->get_results("SELECT * FROM $table_name ORDER BY created_at DESC");
+        $links = get_posts($args);
         
         if (empty($links)) {
             echo '<p>No tracker links created yet.</p>';
@@ -190,16 +239,20 @@ class WP_Tracker {
         echo '<tbody>';
         
         foreach ($links as $link) {
-            $tracker_url = home_url('?tracker_id=' . $link->tracker_id);
+            $tracker_id = get_post_meta($link->ID, '_tracker_id', true);
+            $destination_url = get_post_meta($link->ID, '_destination_url', true);
+            $click_count = get_post_meta($link->ID, '_click_count', true);
+            $tracking_path = get_option('wp_tracker_path', 'trackers');
+            $tracker_url = home_url($tracking_path . '/' . $tracker_id);
             
             echo '<tr>';
-            echo '<td><code>' . esc_html($link->tracker_id) . '</code></td>';
-            echo '<td><a href="' . esc_url($link->destination_url) . '" target="_blank">' . esc_html($link->destination_url) . '</a></td>';
-            echo '<td>' . intval($link->click_count) . '</td>';
-            echo '<td>' . esc_html($link->created_at) . '</td>';
+            echo '<td><code>' . esc_html($tracker_id) . '</code></td>';
+            echo '<td><a href="' . esc_url($destination_url) . '" target="_blank">' . esc_html($destination_url) . '</a></td>';
+            echo '<td>' . intval($click_count) . '</td>';
+            echo '<td>' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
             echo '<td>';
             echo '<button class="button copy-tracker" data-url="' . esc_attr($tracker_url) . '">Copy URL</button> ';
-            echo '<button class="button delete-tracker" data-tracker-id="' . esc_attr($link->tracker_id) . '">Delete</button>';
+            echo '<button class="button delete-tracker" data-post-id="' . esc_attr($link->ID) . '">Delete</button>';
             echo '</td>';
             echo '</tr>';
         }
@@ -232,26 +285,30 @@ class WP_Tracker {
             wp_send_json_error('Invalid destination URL');
         }
         
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'tracker_links';
-        
         // Generate unique tracker ID
         do {
             $tracker_id = wp_generate_password(8, false);
-        } while ($wpdb->get_var($wpdb->prepare("SELECT id FROM $table_name WHERE tracker_id = %s", $tracker_id)));
+        } while (get_page_by_path($tracker_id, OBJECT, 'tracker_link'));
         
-        $result = $wpdb->insert(
-            $table_name,
-            array(
-                'destination_url' => $destination_url,
-                'tracker_id' => $tracker_id
-            ),
-            array('%s', '%s')
+        // Create the post
+        $post_data = array(
+            'post_title'    => 'Tracker: ' . $tracker_id,
+            'post_name'     => $tracker_id,
+            'post_status'   => 'publish',
+            'post_type'     => 'tracker_link',
+            'post_author'   => get_current_user_id()
         );
         
-        if ($result === false) {
-            wp_send_json_error('Failed to create tracker link');
+        $post_id = wp_insert_post($post_data);
+        
+        if (is_wp_error($post_id)) {
+            wp_send_json_error('Failed to create tracker link: ' . $post_id->get_error_message());
         }
+        
+        // Add post meta
+        update_post_meta($post_id, '_destination_url', $destination_url);
+        update_post_meta($post_id, '_click_count', 0);
+        update_post_meta($post_id, '_tracker_id', $tracker_id);
         
         wp_send_json_success('Tracker link created successfully');
     }
@@ -263,50 +320,147 @@ class WP_Tracker {
             wp_die('Unauthorized');
         }
         
-        $tracker_id = sanitize_text_field($_POST['tracker_id']);
+        $post_id = intval($_POST['post_id']);
         
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'tracker_links';
+        if (!$post_id) {
+            wp_send_json_error('Invalid post ID');
+        }
         
-        $result = $wpdb->delete(
-            $table_name,
-            array('tracker_id' => $tracker_id),
-            array('%s')
-        );
+        $post = get_post($post_id);
         
-        if ($result === false) {
+        if (!$post || $post->post_type !== 'tracker_link') {
+            wp_send_json_error('Tracker link not found');
+        }
+        
+        $result = wp_delete_post($post_id, true);
+        
+        if (!$result) {
             wp_send_json_error('Failed to delete tracker link');
         }
         
         wp_send_json_success('Tracker link deleted successfully');
     }
     
+    public function settings_page() {
+        $tracking_path = get_option('wp_tracker_path', 'trackers');
+        $site_url = home_url();
+        ?>
+        <div class="wrap">
+            <h1>WP Tracker Settings</h1>
+            
+            <div class="card">
+                <h2>Tracking Path Configuration</h2>
+                <form id="tracking-settings-form">
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row">
+                                <label for="tracking_path">Tracking Path</label>
+                            </th>
+                            <td>
+                                <input type="text" id="tracking_path" name="tracking_path" value="<?php echo esc_attr($tracking_path); ?>" class="regular-text" required>
+                                <p class="description">Enter the path for your tracker URLs (e.g., "trackers", "links", "go")</p>
+                                <p class="description">Your tracker URLs will be: <code><?php echo esc_url($site_url . '/' . $tracking_path . '/{tracker_id}'); ?></code></p>
+                            </td>
+                        </tr>
+                    </table>
+                    <p class="submit">
+                        <button type="submit" class="button button-primary">Save Settings</button>
+                    </p>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h2>Important Note</h2>
+                <p>After changing the tracking path, you may need to:</p>
+                <ol>
+                    <li>Go to <strong>Settings > Permalinks</strong> and click "Save Changes" to flush rewrite rules</li>
+                    <li>Update any existing tracker links you've shared</li>
+                </ol>
+            </div>
+        </div>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('#tracking-settings-form').on('submit', function(e) {
+                e.preventDefault();
+                
+                var trackingPath = $('#tracking_path').val();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'save_tracking_settings',
+                        tracking_path: trackingPath,
+                        nonce: '<?php echo wp_create_nonce('wp_tracker_settings_nonce'); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            alert('Settings saved successfully!');
+                            location.reload();
+                        } else {
+                            alert('Error: ' + response.data);
+                        }
+                    }
+                });
+            });
+        });
+        </script>
+        <?php
+    }
+    
+    public function save_tracking_settings() {
+        check_ajax_referer('wp_tracker_settings_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized');
+        }
+        
+        $tracking_path = sanitize_title($_POST['tracking_path']);
+        
+        if (empty($tracking_path)) {
+            wp_send_json_error('Tracking path cannot be empty');
+        }
+        
+        // Check if path conflicts with existing post types or pages
+        $existing_post = get_page_by_path($tracking_path);
+        if ($existing_post) {
+            wp_send_json_error('This path conflicts with an existing page or post. Please choose a different path.');
+        }
+        
+        update_option('wp_tracker_path', $tracking_path);
+        
+        // Flush rewrite rules
+        flush_rewrite_rules();
+        
+        wp_send_json_success('Settings saved successfully');
+    }
+    
     public function handle_tracker_redirect() {
-        $tracker_id = sanitize_text_field($_GET['tracker_id']);
+        // Only handle tracker_link post type requests
+        if (!is_singular('tracker_link')) {
+            return;
+        }
         
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'tracker_links';
+        global $post;
         
-        $link = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table_name WHERE tracker_id = %s",
-            $tracker_id
-        ));
+        if (!$post || $post->post_type !== 'tracker_link') {
+            return;
+        }
         
-        if (!$link) {
-            wp_die('Tracker link not found');
+        // Get the destination URL from post meta
+        $destination_url = get_post_meta($post->ID, '_destination_url', true);
+        $click_count = get_post_meta($post->ID, '_click_count', true);
+        
+        if (empty($destination_url)) {
+            wp_die('Tracker link not found or invalid');
         }
         
         // Increment click count
-        $wpdb->update(
-            $table_name,
-            array('click_count' => $link->click_count + 1),
-            array('tracker_id' => $tracker_id),
-            array('%d'),
-            array('%s')
-        );
+        update_post_meta($post->ID, '_click_count', intval($click_count) + 1);
         
         // Redirect to destination
-        wp_redirect($link->destination_url);
+        wp_redirect($destination_url);
         exit;
     }
 }

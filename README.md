@@ -30,10 +30,15 @@ A simple WordPress plugin that creates tracker links to monitor click counts and
 
 Tracker URLs follow this format:
 ```
-https://yoursite.com/?tracker_id=ABC123XY
+https://yoursite.com/trackers/ABC123XY
 ```
 
 Where `ABC123XY` is a unique 8-character identifier.
+
+**Custom Tracking Path**: You can customize the tracking path in the Settings page. For example, you could use:
+- `https://yoursite.com/links/ABC123XY`
+- `https://yoursite.com/go/ABC123XY`
+- `https://yoursite.com/redirect/ABC123XY`
 
 ### How It Works
 
@@ -50,15 +55,19 @@ Where `ABC123XY` is a unique 8-character identifier.
 - **Copy URLs**: Click "Copy URL" to copy tracker URLs to clipboard
 - **Delete Links**: Remove tracker links you no longer need
 
-## Database
+## Implementation
 
-The plugin creates a table called `wp_tracker_links` with the following structure:
+The plugin uses WordPress custom post types to store tracker links, which provides:
 
-- `id`: Auto-incrementing primary key
-- `destination_url`: The URL to redirect to
-- `tracker_id`: Unique 8-character identifier
-- `click_count`: Number of clicks
-- `created_at`: Timestamp when the tracker was created
+- **WordPress Native**: Uses WordPress's built-in post system
+- **No Database Conflicts**: Avoids potential conflicts with other plugins
+- **Better Performance**: Leverages WordPress's optimized post queries
+- **Automatic Cleanup**: Posts are automatically cleaned up when the plugin is deactivated
+
+Each tracker link is stored as a `tracker_link` post type with the following meta fields:
+- `_destination_url`: The URL to redirect to
+- `_click_count`: Number of clicks
+- `_tracker_id`: Unique 8-character identifier
 
 ## Security Features
 
