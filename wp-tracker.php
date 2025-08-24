@@ -84,6 +84,9 @@ class WP_Tracker {
             update_option('wp_tracker_path', 'trackers');
         }
         
+        // Register the post type first
+        $this->register_tracker_post_type();
+        
         // Flush rewrite rules to register the custom post type
         flush_rewrite_rules();
     }
@@ -437,31 +440,74 @@ class WP_Tracker {
     }
     
     public function handle_tracker_redirect() {
-        // Only handle tracker_link post type requests
-        if (!is_singular('tracker_link')) {
-            return;
+        global $wp_query, $post;
+        
+        // Get the current path
+        $current_path = trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/');
+        $tracking_path = get_option('wp_tracker_path', 'trackers');
+        
+        // Check if this is a tracker URL
+        if (strpos($current_path, $tracking_path . '/') === 0) {
+            // Extract the slug from the URL
+            $slug = str_replace($tracking_path . '/', '', $current_path);
+            $slug = trim($slug, '/');
+            
+            if (empty($slug)) {
+                return; // Not a specific tracker link
+            }
+            
+            // Find the tracker post by slug
+            $tracker_post = get_posts(array(
+                'post_type' => 'tracker_link',
+                'name' => $slug,
+                'post_status' => 'publish',
+                'numberposts' => 1
+            ));
+            
+            if (empty($tracker_post)) {
+                // Try alternative method - check if it's a valid post
+                $tracker_post = get_page_by_path($current_path, OBJECT, 'tracker_link');
+            }
+            
+            if (!empty($tracker_post)) {
+                $post = $tracker_post[0];
+                
+                // Get the destination URL from post meta
+                $destination_url = get_post_meta($post->ID, '_destination_url', true);
+                $click_count = get_post_meta($post->ID, '_click_count', true);
+                
+                if (!empty($destination_url)) {
+                    // Increment click count
+                    update_post_meta($post->ID, '_click_count', intval($click_count) + 1);
+                    
+                    // Redirect to destination
+                    wp_redirect($destination_url);
+                    exit;
+                }
+            }
         }
         
-        global $post;
-        
-        if (!$post || $post->post_type !== 'tracker_link') {
-            return;
+        // Fallback: Check if this is a singular tracker_link post
+        if (is_singular('tracker_link')) {
+            if (!$post || $post->post_type !== 'tracker_link') {
+                return;
+            }
+            
+            // Get the destination URL from post meta
+            $destination_url = get_post_meta($post->ID, '_destination_url', true);
+            $click_count = get_post_meta($post->ID, '_click_count', true);
+            
+            if (empty($destination_url)) {
+                wp_die('Tracker link not found or invalid');
+            }
+            
+            // Increment click count
+            update_post_meta($post->ID, '_click_count', intval($click_count) + 1);
+            
+            // Redirect to destination
+            wp_redirect($destination_url);
+            exit;
         }
-        
-        // Get the destination URL from post meta
-        $destination_url = get_post_meta($post->ID, '_destination_url', true);
-        $click_count = get_post_meta($post->ID, '_click_count', true);
-        
-        if (empty($destination_url)) {
-            wp_die('Tracker link not found or invalid');
-        }
-        
-        // Increment click count
-        update_post_meta($post->ID, '_click_count', intval($click_count) + 1);
-        
-        // Redirect to destination
-        wp_redirect($destination_url);
-        exit;
     }
 }
 
