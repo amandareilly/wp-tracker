@@ -3,7 +3,7 @@
  * Plugin Name: WP Tracker
  * Plugin URI: https://github.com/yourusername/wp-tracker
  * Description: Create tracker links that count clicks and redirect to destination URLs
- * Version: 1.1.4
+ * Version: 1.2.0
  * Author: Your Name
  * License: GPL v2 or later
  * Text Domain: wp-tracker
@@ -152,10 +152,22 @@ class WP_Tracker {
             <div class="card">
                 <h2>Tracker Links</h2>
                 <div id="tracker-links-list">
-                    <?php $this->display_tracker_links(); ?>
+                    <?php 
+                    try {
+                        $this->display_tracker_links(); 
+                    } catch (Exception $e) {
+                        echo '<p>Error loading tracker links: ' . esc_html($e->getMessage()) . '</p>';
+                    }
+                    ?>
                 </div>
                 <div id="archived-links-list" style="display: none;">
-                    <?php $this->display_archived_links(); ?>
+                    <?php 
+                    try {
+                        $this->display_archived_links(); 
+                    } catch (Exception $e) {
+                        echo '<p>Error loading archived links: ' . esc_html($e->getMessage()) . '</p>';
+                    }
+                    ?>
                 </div>
             </div>
         </div>
@@ -336,8 +348,12 @@ class WP_Tracker {
             echo '<td class="column-clicks">' . intval($click_count) . '</td>';
             echo '<td class="column-created">' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
             echo '<td class="column-qr-code">';
-            $qr_url = $this->generate_qr_code($tracker_url, 80);
-            echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
+            try {
+                $qr_url = $this->generate_qr_code($tracker_url, 80);
+                echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
+            } catch (Exception $e) {
+                echo '<span style="color: #999;">QR Error</span>';
+            }
             echo '</td>';
             echo '<td class="column-actions">';
             echo '<button class="button copy-tracker" data-url="' . esc_attr($tracker_url) . '">Copy URL</button> ';
@@ -528,8 +544,12 @@ class WP_Tracker {
             echo '<td class="column-clicks">' . intval($click_count) . '</td>';
             echo '<td class="column-created">' . esc_html(get_the_date('Y-m-d H:i:s', $link->ID)) . '</td>';
             echo '<td class="column-qr-code">';
-            $qr_url = $this->generate_qr_code($tracker_url, 80);
-            echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
+            try {
+                $qr_url = $this->generate_qr_code($tracker_url, 80);
+                echo '<img src="' . esc_url($qr_url) . '" alt="QR Code" title="Click to download" class="qr-preview" data-post-id="' . esc_attr($link->ID) . '">';
+            } catch (Exception $e) {
+                echo '<span style="color: #999;">QR Error</span>';
+            }
             echo '</td>';
             echo '<td class="column-actions">';
             echo '<button class="button copy-tracker" data-url="' . esc_attr($tracker_url) . '">Copy URL</button> ';
