@@ -3,7 +3,7 @@
  * Plugin Name: WP Tracker
  * Plugin URI: https://github.com/yourusername/wp-tracker
  * Description: Create tracker links that count clicks and redirect to destination URLs
- * Version: 1.1.3
+ * Version: 1.1.4
  * Author: Your Name
  * License: GPL v2 or later
  * Text Domain: wp-tracker
