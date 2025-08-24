@@ -17,6 +17,26 @@ This will:
 4. Copy all necessary files
 5. Create a ZIP package with the current version
 
+## Version Management
+
+The build script can automatically increment the plugin version:
+
+```bash
+# Increment patch version (1.0.0 → 1.0.1)
+./build.sh --patch
+
+# Increment minor version (1.0.0 → 1.1.0)
+./build.sh --minor
+
+# Increment major version (1.0.0 → 2.0.0)
+./build.sh --major
+```
+
+When using version increments:
+- The script automatically updates the version in `wp-tracker.php`
+- A backup of the original file is created (`wp-tracker.php.backup`)
+- The new package is built with the updated version
+
 ## Build Output
 
 The build script creates:
@@ -30,15 +50,15 @@ The build script automatically reads the version from the plugin header in `wp-t
 ```php
 /**
  * Plugin Name: WP Tracker
- * Version: 1.0.0
+ * Version: 1.0.1
  * ...
  */
 ```
 
-To update the version:
-1. Edit the `Version:` line in `wp-tracker.php`
-2. Run `./build.sh`
-3. The new package will be created with the updated version
+The script supports semantic versioning increments:
+- **Patch**: Bug fixes and minor updates (1.0.0 → 1.0.1)
+- **Minor**: New features, backward compatible (1.0.0 → 1.1.0)  
+- **Major**: Breaking changes (1.0.0 → 2.0.0)
 
 ## File Structure
 
